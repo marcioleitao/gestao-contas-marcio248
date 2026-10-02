@@ -11,8 +11,8 @@ from datetime import datetime
 # CONFIGURAÇÃO DA PÁGINA
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="FinPulse | Controle Financeiro",
-    page_icon="⚡",
+    page_title="Controle Financeiro",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -21,7 +21,7 @@ st.set_page_config(
 CACHE_FILE = "ultimo_extrato.csv"
 
 # ---------------------------------------------------------
-# STYLING CSS CUSTOMIZADO
+# STYLING CSS CUSTOMIZADO (Tema Cinza / Minimalista)
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -32,29 +32,27 @@ st.markdown("""
     }
     
     .stApp {
-        background: #0B0E14;
-        color: #F3F4F6;
+        background: #111827;
+        color: #E5E7EB;
     }
 
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
 
     .header-container {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+        background: linear-gradient(135deg, #1F2937 0%, #111827 100%);
         backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        border: 1px solid #374151;
         border-radius: 20px;
         padding: 24px;
         margin-bottom: 20px;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
     }
     
     .header-title {
         font-size: 1.8rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #6366F1 0%, #A855F7 50%, #EC4899 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #F9FAFB;
         margin: 0;
         letter-spacing: -0.02em;
     }
@@ -66,12 +64,12 @@ st.markdown("""
     }
 
     .kpi-card {
-        background: rgba(17, 24, 39, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: #1F2937;
+        border: 1px solid #374151;
         border-radius: 16px;
         padding: 16px;
         margin-bottom: 12px;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     }
 
     .kpi-label {
@@ -86,7 +84,7 @@ st.markdown("""
     .kpi-value {
         font-size: 1.6rem;
         font-weight: 800;
-        color: #FFFFFF;
+        color: #F9FAFB;
         letter-spacing: -0.02em;
     }
 
@@ -98,10 +96,10 @@ st.markdown("""
 
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
-        background-color: rgba(17, 24, 39, 0.5);
+        background-color: #1F2937;
         padding: 6px;
         border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        border: 1px solid #374151;
     }
 
     .stTabs [data-baseweb="tab"] {
@@ -116,9 +114,9 @@ st.markdown("""
     }
 
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
-        color: #FFFFFF !important;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+        background: #374151 !important;
+        color: #F9FAFB !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -204,7 +202,7 @@ def extrair_transacoes_pdf(file_bytes):
     return df
 
 # ---------------------------------------------------------
-# PAINEL PRINCIPAL & LÓGICA DE PERSISTÊNCIA
+# PAINEL PRINCIPAL & PERSISTÊNCIA
 # ---------------------------------------------------------
 hoje = datetime.now()
 dia_fechamento = 23
@@ -226,7 +224,7 @@ st.markdown(f"""
     <h1 class="header-title">Controle Financeiro</h1>
     <div class="header-subtitle">Visão inteligente de gastos e metas em tempo real.</div>
     <div style="margin-top: 12px;">
-        <span style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #818CF8; padding: 4px 12px; border-radius: 16px; font-size: 0.8rem; font-weight: 600;">
+        <span style="background: #374151; border: 1px solid #4B5563; color: #D1D5DB; padding: 4px 12px; border-radius: 16px; font-size: 0.8rem; font-weight: 600;">
             📅 Fechamento: {data_fechamento.strftime('%d/%m/%Y')} ({dias_restantes} dias)
         </span>
     </div>
@@ -238,7 +236,6 @@ st.markdown(f"""
 # ---------------------------------------------------------
 df_fatura = pd.DataFrame()
 
-# Tenta carregar do cache salvo anteriormente
 if os.path.exists(CACHE_FILE):
     try:
         df_fatura = pd.read_csv(CACHE_FILE)
@@ -251,13 +248,12 @@ with st.expander("📥 1. Atualizar Fatura PDF / Configurações", expanded=df_f
     with col_up:
         uploaded_file = st.file_uploader("Substituir / Importar Fatura PDF", type=["pdf"], key="main_pdf_uploader")
         
-        # Se um novo PDF for submetido, processa e atualiza o ficheiro em cache
         if uploaded_file is not None:
             df_novo = extrair_transacoes_pdf(uploaded_file)
             if not df_novo.empty:
                 df_fatura = df_novo
                 df_fatura.to_csv(CACHE_FILE, index=False)
-                st.success("Fatura guardada com sucesso! Ficará salva para os próximos acessos.")
+                st.success("Fatura guardada com sucesso!")
                 
     with col_cfg:
         meta_fatura = st.number_input("Meta Cartão (R$)", value=5000.0, step=100.0)
@@ -269,13 +265,13 @@ with st.expander("📥 1. Atualizar Fatura PDF / Configurações", expanded=df_f
     val_aluguel = c1.number_input("Aluguel (R$)", value=0.0, step=100.0)
     val_luz = c2.number_input("Luz (R$)", value=0.0, step=10.0)
     val_internet = c3.number_input("Internet (R$)", value=0.0, step=10.0)
-    val_celular = c4.number_input("Celular (R$)", value=0.0, step=50.0)
+    val_celular = c4.number_input("Celular (R$)", value=0.0, step=10.0)
     val_outros = c5.number_input("Outros (R$)", value=0.0, step=50.0)
 
 total_despesas_externas = val_aluguel + val_luz + val_internet + val_celular + val_outros
 
 # ---------------------------------------------------------
-# PROCESSAMENTO & EXIBIÇÃO
+# EXIBIÇÃO DO DASHBOARD
 # ---------------------------------------------------------
 if not df_fatura.empty:
     total_cartao = df_fatura["Valor"].sum()
@@ -291,7 +287,7 @@ if not df_fatura.empty:
         <div class="kpi-card">
             <div class="kpi-label">Cartão Acumulado</div>
             <div class="kpi-value">R$ {total_cartao:,.2f}</div>
-            <div class="kpi-sub" style="color: #60A5FA;">Fatura em memória</div>
+            <div class="kpi-sub" style="color: #9CA3AF;">Fatura em memória</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -309,7 +305,7 @@ if not df_fatura.empty:
         st.markdown(f"""
         <div class="kpi-card">
             <div class="kpi-label">Meta Diária Limite</div>
-            <div class="kpi-value" style="color: #A855F7;">R$ {meta_diaria:,.2f}</div>
+            <div class="kpi-value" style="color: #D1D5DB;">R$ {meta_diaria:,.2f}</div>
             <div class="kpi-sub" style="color: #9CA3AF;">Restam {dias_restantes} dias</div>
         </div>
         """, unsafe_allow_html=True)
@@ -325,16 +321,16 @@ if not df_fatura.empty:
 
     # Barra de Progresso
     progresso_pct = min(1.0, max(0.0, total_cartao / meta_fatura)) if meta_fatura > 0 else 1.0
-    cor_barra = "#6366F1" if progresso_pct < 0.85 else "#EF4444"
+    cor_barra = "#9CA3AF" if progresso_pct < 0.85 else "#EF4444"
     
     st.markdown(f"""
-    <div style="background: rgba(17, 24, 39, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 14px; margin-top: 10px; margin-bottom: 20px;">
+    <div style="background: #1F2937; border: 1px solid #374151; border-radius: 12px; padding: 14px; margin-top: 10px; margin-bottom: 20px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 600; font-size: 0.85rem;">
             <span>Consumo da Meta</span>
             <span>{progresso_pct*100:.1f}% ({total_cartao:,.2f} / {meta_fatura:,.2f})</span>
         </div>
-        <div style="width: 100%; background-color: #1F2937; height: 8px; border-radius: 20px; overflow: hidden;">
-            <div style="width: {progresso_pct*100}%; background: linear-gradient(90deg, #6366F1 0%, {cor_barra} 100%); height: 100%;"></div>
+        <div style="width: 100%; background-color: #374151; height: 8px; border-radius: 20px; overflow: hidden;">
+            <div style="width: {progresso_pct*100}%; background: {cor_barra}; height: 100%;"></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -364,9 +360,9 @@ if not df_fatura.empty:
             x=df_timeline["Data"], 
             y=df_timeline["Soma Acumulada"], 
             mode='lines+markers',
-            line=dict(color='#818CF8', width=3, shape='spline'),
+            line=dict(color='#9CA3AF', width=3, shape='spline'),
             fill='tozeroy',
-            fillcolor='rgba(99, 102, 241, 0.1)'
+            fillcolor='rgba(156, 163, 175, 0.1)'
         ))
         fig_line.add_hline(y=meta_fatura, line_dash="dash", line_color="#EF4444")
         fig_line.update_layout(**plotly_theme, height=320)
@@ -374,13 +370,13 @@ if not df_fatura.empty:
 
     with tab2:
         df_estab = df_fatura.groupby("Descrição")["Valor"].sum().sort_values(ascending=True).reset_index()
-        fig_bar = px.bar(df_estab, x="Valor", y="Descrição", orientation='h', text_auto='.2f', color="Valor", color_continuous_scale=["#312E81", "#6366F1"])
+        fig_bar = px.bar(df_estab, x="Valor", y="Descrição", orientation='h', text_auto='.2f', color="Valor", color_continuous_scale=["#374151", "#9CA3AF"])
         fig_bar.update_layout(**plotly_theme, height=400, showlegend=False)
         st.plotly_chart(fig_bar, use_container_width=True)
 
     with tab3:
         df_cat = df_fatura.groupby("Categoria")["Valor"].sum().reset_index()
-        fig_pie = px.pie(df_cat, values="Valor", names="Categoria", hole=0.5, color_discrete_sequence=["#6366F1", "#EC4899", "#10B981", "#F59E0B", "#8B5CF6"])
+        fig_pie = px.pie(df_cat, values="Valor", names="Categoria", hole=0.5, color_discrete_sequence=["#D1D5DB", "#9CA3AF", "#6B7280", "#4B5CF6", "#374151"])
         fig_pie.update_layout(**plotly_theme, height=350)
         st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -395,7 +391,7 @@ if not df_fatura.empty:
         ]
         df_geral = pd.DataFrame(dados_gerais)
         df_geral = df_geral[df_geral["Valor"] > 0]
-        fig_geral = px.bar(df_geral, x="Origem", y="Valor", color="Tipo", text_auto='.2f', color_discrete_map={"Variável": "#6366F1", "Fixa": "#F59E0B"})
+        fig_geral = px.bar(df_geral, x="Origem", y="Valor", color="Tipo", text_auto='.2f', color_discrete_map={"Variável": "#9CA3AF", "Fixa": "#4B5563"})
         fig_geral.update_layout(**plotly_theme, height=350)
         st.plotly_chart(fig_geral, use_container_width=True)
 
@@ -403,4 +399,4 @@ if not df_fatura.empty:
         st.dataframe(df_fatura, use_container_width=True, height=350)
 
 else:
-    st.info("👈 Por favor, carregue a sua fatura em PDF na caixa acima. Ela ficará guardada automaticamente para os próximos acessos!")
+    st.info("👈 Carregue a sua fatura em PDF na caixa acima. Ela ficará salva automaticamente para os próximos acessos!")
