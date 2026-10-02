@@ -389,7 +389,8 @@ if not df_fatura.empty:
             {"Origem": "Cartão", "Tipo": "Variável", "Valor": total_cartao},
             {"Origem": "Aluguel", "Tipo": "Fixa", "Valor": val_aluguel},
             {"Origem": "Luz", "Tipo": "Fixa", "Valor": val_luz},
-            {"Origem": "Gás", "Tipo": "Fixa", "Valor": val_gas},
+            {"Origem": "Internet", "Tipo": "Fixa", "Valor": val_internet},
+            {"Origem": "Celular", "Tipo": "Fixa", "Valor": val_celular},
             {"Origem": "Outros", "Tipo": "Fixa", "Valor": val_outros},
         ]
         df_geral = pd.DataFrame(dados_gerais)
