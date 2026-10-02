@@ -265,11 +265,12 @@ with st.expander("📥 1. Atualizar Fatura PDF / Configurações", expanded=df_f
 
     st.markdown("---")
     st.markdown("##### 🏠 Despesas Fora do Cartão (Boletos / Pix)")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(4)
     val_aluguel = c1.number_input("Aluguel (R$)", value=0.0, step=100.0)
     val_luz = c2.number_input("Luz (R$)", value=0.0, step=10.0)
-    val_gas = c3.number_input("Gás (R$)", value=0.0, step=10.0)
-    val_outros = c4.number_input("Outros (R$)", value=0.0, step=50.0)
+    val_internet = c3.number_input("Internet (R$)", value=0.0, step=10.0)
+    val_celular = c4.number_input("Celular (R$)", value=0.0, step=50.0)
+    val_outros = c5.number_input("Outros (R$)", value=0.0, step=50.0)
 
 total_despesas_externas = val_aluguel + val_luz + val_gas + val_outros
 
