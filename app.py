@@ -17,11 +17,10 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Ficheiro de cache para guardar o último extrato carregado
 CACHE_FILE = "ultimo_extrato.csv"
 
 # ---------------------------------------------------------
-# STYLING CSS CUSTOMIZADO (Tema Cinza / Minimalista)
+# STYLING CSS CUSTOMIZADO
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -73,7 +72,7 @@ st.markdown("""
     }
 
     .kpi-label {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -82,7 +81,7 @@ st.markdown("""
     }
 
     .kpi-value {
-        font-size: 1.6rem;
+        font-size: 1.5rem;
         font-weight: 800;
         color: #F9FAFB;
         letter-spacing: -0.02em;
@@ -218,7 +217,6 @@ except ValueError:
 
 dias_restantes = max(0, (data_fechamento - hoje).days)
 
-# Banner Principal
 st.markdown(f"""
 <div class="header-container">
     <h1 class="header-title">Controle Financeiro</h1>
@@ -279,43 +277,52 @@ if not df_fatura.empty:
     meta_diaria = saldo_cartao_restante / dias_restantes if dias_restantes > 0 else 0
     total_geral_mes = total_cartao + total_despesas_externas
 
-    # --- CARDS DE MÉTRICAS ---
-    kcol1, kcol2, kcol3, kcol4 = st.columns(4)
+    # --- CARDS DE MÉTRICAS (KPIs) ---
+    kcol1, kcol2, kcol3, kcol4, kcol5 = st.columns(5)
     
     with kcol1:
         st.markdown(f"""
         <div class="kpi-card">
             <div class="kpi-label">Cartão Acumulado</div>
-            <div class="kpi-value">R$ {total_cartao:,.2f}</div>
-            <div class="kpi-sub" style="color: #9CA3AF;">Fatura em memória</div>
+            <div class="kpi-value" style="color: #EF4444;">R$ {total_cartao:,.2f}</div>
+            <div class="kpi-sub" style="color: #EF4444;">Fatura atual</div>
         </div>
         """, unsafe_allow_html=True)
-        
+
     with kcol2:
-        cor_sub = "#10B981" if saldo_cartao_restante >= 0 else "#EF4444"
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-label">Saldo Cartão Livre</div>
-            <div class="kpi-value" style="color: {'#10B981' if saldo_cartao_restante >= 0 else '#EF4444'};">R$ {saldo_cartao_restante:,.2f}</div>
-            <div class="kpi-sub" style="color: {cor_sub};">Meta R$ {meta_fatura:,.0f}</div>
+            <div class="kpi-label">Contas Externas</div>
+            <div class="kpi-value" style="color: #F59E0B;">R$ {total_despesas_externas:,.2f}</div>
+            <div class="kpi-sub" style="color: #9CA3AF;">Boletos & Pix</div>
         </div>
         """, unsafe_allow_html=True)
 
     with kcol3:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-label">Meta Diária Limite</div>
-            <div class="kpi-value" style="color: #D1D5DB;">R$ {meta_diaria:,.2f}</div>
-            <div class="kpi-sub" style="color: #9CA3AF;">Restam {dias_restantes} dias</div>
+            <div class="kpi-label">Total Geral Mês</div>
+            <div class="kpi-value" style="color: #60A5FA;">R$ {total_geral_mes:,.2f}</div>
+            <div class="kpi-sub" style="color: #60A5FA;">Cartão + Contas</div>
         </div>
         """, unsafe_allow_html=True)
 
     with kcol4:
+        cor_sub = "#10B981" if saldo_cartao_restante >= 0 else "#EF4444"
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-label">Contas Externas</div>
-            <div class="kpi-value" style="color: #F59E0B;">R$ {total_despesas_externas:,.2f}</div>
-            <div class="kpi-sub" style="color: #9CA3AF;">Pix & Boletos</div>
+            <div class="kpi-label">Saldo Cartão Libre</div>
+            <div class="kpi-value" style="color: {'#10B981' if saldo_cartao_restante >= 0 else '#EF4444'};">R$ {saldo_cartao_restante:,.2f}</div>
+            <div class="kpi-sub" style="color: {cor_sub};">Meta R$ {meta_fatura:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with kcol5:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Meta Diária Limite</div>
+            <div class="kpi-value" style="color: #D1D5DB;">R$ {meta_diaria:,.2f}</div>
+            <div class="kpi-sub" style="color: #9CA3AF;">Restam {dias_restantes} dias</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -326,7 +333,7 @@ if not df_fatura.empty:
     st.markdown(f"""
     <div style="background: #1F2937; border: 1px solid #374151; border-radius: 12px; padding: 14px; margin-top: 10px; margin-bottom: 20px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 600; font-size: 0.85rem;">
-            <span>Consumo da Meta</span>
+            <span>Consumo da Meta do Cartão</span>
             <span>{progresso_pct*100:.1f}% ({total_cartao:,.2f} / {meta_fatura:,.2f})</span>
         </div>
         <div style="width: 100%; background-color: #374151; height: 8px; border-radius: 20px; overflow: hidden;">
@@ -360,9 +367,9 @@ if not df_fatura.empty:
             x=df_timeline["Data"], 
             y=df_timeline["Soma Acumulada"], 
             mode='lines+markers',
-            line=dict(color='#9CA3AF', width=3, shape='spline'),
+            line=dict(color='#EF4444', width=3, shape='spline'),
             fill='tozeroy',
-            fillcolor='rgba(156, 163, 175, 0.1)'
+            fillcolor='rgba(239, 68, 68, 0.1)'
         ))
         fig_line.add_hline(y=meta_fatura, line_dash="dash", line_color="#EF4444")
         fig_line.update_layout(**plotly_theme, height=320)
@@ -370,13 +377,13 @@ if not df_fatura.empty:
 
     with tab2:
         df_estab = df_fatura.groupby("Descrição")["Valor"].sum().sort_values(ascending=True).reset_index()
-        fig_bar = px.bar(df_estab, x="Valor", y="Descrição", orientation='h', text_auto='.2f', color="Valor", color_continuous_scale=["#374151", "#9CA3AF"])
+        fig_bar = px.bar(df_estab, x="Valor", y="Descrição", orientation='h', text_auto='.2f', color="Valor", color_continuous_scale=["#374151", "#EF4444"])
         fig_bar.update_layout(**plotly_theme, height=400, showlegend=False)
         st.plotly_chart(fig_bar, use_container_width=True)
 
     with tab3:
         df_cat = df_fatura.groupby("Categoria")["Valor"].sum().reset_index()
-        fig_pie = px.pie(df_cat, values="Valor", names="Categoria", hole=0.5, color_discrete_sequence=["#D1D5DB", "#9CA3AF", "#6B7280", "#4B5CF6", "#374151"])
+        fig_pie = px.pie(df_cat, values="Valor", names="Categoria", hole=0.5, color_discrete_sequence=["#EF4444", "#D1D5DB", "#9CA3AF", "#6B7280", "#374151"])
         fig_pie.update_layout(**plotly_theme, height=350)
         st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -391,7 +398,7 @@ if not df_fatura.empty:
         ]
         df_geral = pd.DataFrame(dados_gerais)
         df_geral = df_geral[df_geral["Valor"] > 0]
-        fig_geral = px.bar(df_geral, x="Origem", y="Valor", color="Tipo", text_auto='.2f', color_discrete_map={"Variável": "#9CA3AF", "Fixa": "#4B5563"})
+        fig_geral = px.bar(df_geral, x="Origem", y="Valor", color="Tipo", text_auto='.2f', color_discrete_map={"Variável": "#EF4444", "Fixa": "#4B5563"})
         fig_geral.update_layout(**plotly_theme, height=350)
         st.plotly_chart(fig_geral, use_container_width=True)
 
