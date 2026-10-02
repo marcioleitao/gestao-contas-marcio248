@@ -45,28 +45,37 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# FUNÇÕES DE PROCESSAMENTO DO PDF
+# FUNÇÕES DE PROCESSAMENTO DO PDF (FLEXÍVEL)
 # ---------------------------------------------------------
 def categorizar_estabelecimento(nome, eh_parcelado):
     if eh_parcelado:
         return "Parcelamentos Fixos"
     
     nome_upper = nome.upper()
-    if any(k in nome_upper for k in ["DROGARIA", "RAIA", "FARMACIA", "MED"]):
+    if any(k in nome_upper for k in ["DROGARIA", "RAIA", "FARMACIA", "MED", "DROGASIL", "PAGLESS"]):
         return "Farmácia & Saúde"
-    elif any(k in nome_upper for k in ["SUPERMERCADO", "PADARIA", "OAKBERRY", "ALIMENTOS", "BEER", "MERCADO"]):
+    elif any(k in nome_upper for k in ["SUPERMERCADO", "PADARIA", "OAKBERRY", "ALIMENTOS", "BEER", "MERCADO", "RESTAURANTE", "I准确", "IFOOD", "UBER EATS"]):
         return "Alimentação & Mercado"
-    elif any(k in nome_upper for k in ["VIP ITAIPU", "POSTO", "COMBUSTIVEL", "SHELL", "BR"]):
+    elif any(k in nome_upper for k in ["VIP ITAIPU", "POSTO", "COMBUSTIVEL", "SHELL", "BR", "IPIRANGA", "AUTO POSTO"]):
         return "Combustível & Posto"
-    elif any(k in nome_upper for k in ["TOTALPASS", "ACADEMIA", "GYM"]):
+    elif any(k in nome_upper for k in ["TOTALPASS", "ACADEMIA", "GYM", "SMARTFIT"]):
         return "Fitness & Bem-Estar"
-    elif any(k in nome_upper for k in ["TIM", "CLARO", "VIVO", "SOCIO", "FLUMINENSE"]):
+    elif any(k in nome_upper for k in ["TIM", "CLARO", "VIVO", "SOCIO", "FLUMINENSE", "NETFLIX", "SPOTIFY", "PRIME"]):
         return "Assinaturas & Telefonia"
+    elif any(k in nome_upper for k in ["UBER", "99", "ESTACIONAMENTO"]):
+        return "Transporte & Mobilidade"
     else:
         return "Outros & Gerais"
 
 def extrair_transacoes_pdf(file_bytes):
     transacoes = []
+    
+    # Palavras-chave a ignorar (resumos, saldos e totais)
+    ignorar_palavras = [
+        "SALDO ANTERIOR", "TOTAL DA FATURA", "TOTAL PARA", "PAGAMENTO DE FATURA",
+        "PAGAMENTO EFETUADO", "SUBTOTAL", "LIMITE", "SALDO ATUAL", "RESUMO DA FATURA",
+        "PAGAMENTO RECEBIDO", "CRÉDITO", "ENCARGOS"
+    ]
     
     with pdfplumber.open(file_bytes) as pdf:
         for page in pdf.pages:
@@ -76,29 +85,58 @@ def extrair_transacoes_pdf(file_bytes):
             
             lines = text.split('\n')
             for line in lines:
-                match = re.search(r'(\d{2}/\d{2})\s+\|\s+(.*?)\s+\|\s+BRL\s+([\d\.,]+)', line)
-                if match:
-                    data_str, desc, valor_str = match.groups()
-                    if desc.strip() in ["SALDO ANTERIOR", "TOTAL DA FATURA", "TOTAL PARA MARCIO LEITAO"]:
-                        continue
+                line_upper = line.upper().strip()
+                
+                # Ignorar linhas de totais/resumos
+                if any(p in line_upper for p in ignorar_palavras):
+                    continue
+                
+                # Padrão genérico de data no início da linha (DD/MM ou DD/MM/AAAA)
+                # Exemplos suportados:
+                # 15/10 MERCADO ABC R$ 120,50
+                # 15/10 | MERCADO ABC | BRL 120,50
+                # 15/10/2026 MERCADO ABC 120,50
+                match_data = re.match(r'^(\d{2}/\d{2}(?:/\d{2,4})?)[\s\|]+(.+)', line.strip())
+                if match_data:
+                    data_str = match_data.group(1)
+                    resto = match_data.group(2)
                     
-                    try:
-                        valor_clean = valor_str.replace('.', '').replace(',', '.')
-                        valor = float(valor_clean)
-                        eh_parcela = bool(re.search(r'\d+/\d+', desc))
-                        categoria = categorizar_estabelecimento(desc, eh_parcela)
+                    # Procura por um valor monetário no final da string (ex: 123,45 ou 1.234,56 ou R$ 123,45)
+                    match_valor = re.search(r'(?:BRL|R\$)?\s*(-?[\d\.]+\,\d{2})\s*$', resto)
+                    if match_valor:
+                        valor_str = match_valor.group(1)
+                        # O trecho entre a data e o valor é a descrição
+                        desc = resto[:match_valor.start()].strip(" |-")
                         
-                        transacoes.append({
-                            "Data": data_str,
-                            "Descrição": desc.strip(),
-                            "Valor": valor,
-                            "Parcelado": eh_parcela,
-                            "Categoria": categoria
-                        })
-                    except ValueError:
-                        continue
-                        
-    return pd.DataFrame(transacoes)
+                        if not desc:
+                            continue
+                            
+                        try:
+                            valor_clean = valor_str.replace('.', '').replace(',', '.')
+                            valor = float(valor_clean)
+                            
+                            # Se for pagamento/crédito negativo ou zero, ignora
+                            if valor <= 0:
+                                continue
+                                
+                            eh_parcela = bool(re.search(r'\d+/\d+', desc))
+                            categoria = categorizar_estabelecimento(desc, eh_parcela)
+                            
+                            transacoes.append({
+                                "Data": data_str,
+                                "Descrição": desc,
+                                "Valor": valor,
+                                "Parcelado": eh_parcela,
+                                "Categoria": categoria
+                            })
+                        except ValueError:
+                            continue
+
+    df = pd.DataFrame(transacoes)
+    if not df.empty:
+        # Remover duplicados exatos caso ocorram na leitura do PDF
+        df = df.drop_duplicates()
+    return df
 
 # ---------------------------------------------------------
 # SIDEBAR - CONFIGURAÇÕES & ENTRADAS DE DADOS
@@ -125,15 +163,24 @@ val_outros = st.sidebar.number_input("Outros Boletos / Serviços (R$)", value=0.
 
 total_despesas_externas = val_aluguel + val_luz + val_gas + val_outros
 
-data_hoje = datetime(2026, 10, 1)
-data_fechamento = datetime(2026, 10, dia_fechamento)
-dias_restantes = (data_fechamento - data_hoje).days
+hoje = datetime.now()
+try:
+    data_fechamento = datetime(hoje.year, hoje.month, int(dia_fechamento))
+    if hoje > data_fechamento:
+        # Se já passou o dia do mês atual, avança para o próximo mês
+        prox_mes = hoje.month + 1 if hoje.month < 12 else 1
+        prox_ano = hoje.year if hoje.month < 12 else hoje.year + 1
+        data_fechamento = datetime(prox_ano, prox_mes, int(dia_fechamento))
+except ValueError:
+    data_fechamento = hoje
+
+dias_restantes = max(0, (data_fechamento - hoje).days)
 
 # ---------------------------------------------------------
 # PAINEL PRINCIPAL
 # ---------------------------------------------------------
 st.title("🚀 Copiloto Financeiro Integrado")
-st.caption(f"Data Base: **{data_hoje.strftime('%d/%m/%Y')}** | Fechamento Cartão: **{data_fechamento.strftime('%d/%m/%Y')}** ({dias_restantes} dias restantes)")
+st.caption(f"Data Base: **{hoje.strftime('%d/%m/%Y')}** | Fechamento Cartão: **{data_fechamento.strftime('%d/%m/%Y')}** ({dias_restantes} dias restantes)")
 
 if uploaded_file is not None:
     df_fatura = extrair_transacoes_pdf(uploaded_file)
@@ -152,7 +199,7 @@ if uploaded_file is not None:
         col4.metric("Contas Externas (Boletos/Pix)", f"R$ {total_despesas_externas:,.2f}")
 
         # --- BARRA DE PROGRESSO DA META DO CARTÃO ---
-        progresso_pct = min(1.0, total_cartao / meta_fatura)
+        progresso_pct = min(1.0, max(0.0, total_cartao / meta_fatura)) if meta_fatura > 0 else 1.0
         st.markdown(f"**Progresso da Meta do Cartão de R$ {meta_fatura:,.2f}:** ({progresso_pct*100:.1f}% utilizado)")
         st.progress(progresso_pct)
 
@@ -182,7 +229,7 @@ if uploaded_file is not None:
                 fill='tozeroy'
             ))
             
-            fig_line.add_hline(y=meta_fatura, line_dash="dash", line_color="#FF5252", annotation_text="Teto Meta Cartão (R$ 5.000)")
+            fig_line.add_hline(y=meta_fatura, line_dash="dash", line_color="#FF5252", annotation_text=f"Teto Meta Cartão (R$ {meta_fatura:,.0f})")
 
             fig_line.update_layout(
                 template="plotly_dark",
@@ -263,6 +310,6 @@ if uploaded_file is not None:
             st.dataframe(df_fatura, use_container_width=True)
 
     else:
-        st.error("Não foi possível identificar transações no PDF carregado.")
+        st.error("Não foi possível extrair transações deste PDF. Verifique se o PDF não é uma imagem escaneada ou se está protegido por senha.")
 else:
     st.info("👈 Faça o upload do PDF do cartão e preencha as contas fixas na barra lateral para ver a análise completa!")
