@@ -223,7 +223,7 @@ dias_restantes = max(0, (data_fechamento - hoje).days)
 # Banner Principal
 st.markdown(f"""
 <div class="header-container">
-    <h1 class="header-title">Copiloto Financeiro</h1>
+    <h1 class="header-title">Controle Financeiro</h1>
     <div class="header-subtitle">Visão inteligente de gastos e metas em tempo real.</div>
     <div style="margin-top: 12px;">
         <span style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #818CF8; padding: 4px 12px; border-radius: 16px; font-size: 0.8rem; font-weight: 600;">
