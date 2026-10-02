@@ -272,7 +272,7 @@ with st.expander("📥 1. Atualizar Fatura PDF / Configurações", expanded=df_f
     val_celular = c4.number_input("Celular (R$)", value=0.0, step=50.0)
     val_outros = c5.number_input("Outros (R$)", value=0.0, step=50.0)
 
-total_despesas_externas = val_aluguel + val_luz + val_gas + val_outros
+total_despesas_externas = val_aluguel + val_luz + val_internet + val_celular + val_outros
 
 # ---------------------------------------------------------
 # PROCESSAMENTO & EXIBIÇÃO
