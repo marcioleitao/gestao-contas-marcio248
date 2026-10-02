@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import pdfplumber
 import re
 import os
+import json
 from datetime import datetime
 
 # ---------------------------------------------------------
@@ -18,6 +19,38 @@ st.set_page_config(
 )
 
 CACHE_FILE = "ultimo_extrato.csv"
+CONFIG_FILE = "config.json"
+
+# ---------------------------------------------------------
+# FUNÇÕES DE PERSISTÊNCIA DE CONFIGURAÇÕES
+# ---------------------------------------------------------
+def carregar_configuracoes():
+    defaults = {
+        "meta_fatura": 5000.0,
+        "corte_cabelo": 125.0,
+        "val_aluguel": 0.0,
+        "val_luz": 0.0,
+        "val_internet": 0.0,
+        "val_celular": 0.0,
+        "val_outros": 0.0
+    }
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                saved = json.load(f)
+                defaults.update(saved)
+        except Exception:
+            pass
+    return defaults
+
+def salvar_configuracoes(cfg):
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f)
+    except Exception:
+        pass
+
+config_salva = carregar_configuracoes()
 
 # ---------------------------------------------------------
 # STYLING CSS CUSTOMIZADO
@@ -201,7 +234,7 @@ def extrair_transacoes_pdf(file_bytes):
     return df
 
 # ---------------------------------------------------------
-# PAINEL PRINCIPAL & PERSISTÊNCIA
+# PAINEL PRINCIPAL
 # ---------------------------------------------------------
 hoje = datetime.now()
 dia_fechamento = 23
@@ -230,7 +263,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# CARREGAMENTO E SESSÃO
+# CARREGAMENTO DE EXTRATO EM CACHE
 # ---------------------------------------------------------
 df_fatura = pd.DataFrame()
 
@@ -240,31 +273,48 @@ if os.path.exists(CACHE_FILE):
     except Exception:
         df_fatura = pd.DataFrame()
 
-with st.expander("📥 1. Atualizar Fatura PDF / Configurações", expanded=df_fatura.empty):
-    col_up, col_cfg = st.columns([1, 1])
+# Form de Entrada & Salvamento Automático
+with st.form("form_configuracoes"):
+    st.markdown("##### 📥 Importar Fatura PDF / Ajustar Metas & Contas Fixas")
     
-    with col_up:
-        uploaded_file = st.file_uploader("Substituir / Importar Fatura PDF", type=["pdf"], key="main_pdf_uploader")
-        
+    uploaded_file = st.file_uploader("Substituir / Importar Fatura PDF", type=["pdf"], key="main_pdf_uploader")
+    
+    col_cfg1, col_cfg2 = st.columns(2)
+    meta_fatura = col_cfg1.number_input("Meta Cartão (R$)", value=float(config_salva["meta_fatura"]), step=100.0)
+    corte_cabelo = col_cfg2.number_input("Reserva / Agendados (R$)", value=float(config_salva["corte_cabelo"]), step=10.0)
+
+    st.markdown("---")
+    st.markdown("##### 🏠 Despesas Fora do Cartão (Boletos / Pix)")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    val_aluguel = c1.number_input("Aluguel (R$)", value=float(config_salva["val_aluguel"]), step=100.0)
+    val_luz = c2.number_input("Luz (R$)", value=float(config_salva["val_luz"]), step=10.0)
+    val_internet = c3.number_input("Internet (R$)", value=float(config_salva["val_internet"]), step=10.0)
+    val_celular = c4.number_input("Celular (R$)", value=float(config_salva["val_celular"]), step=10.0)
+    val_outros = c5.number_input("Outros (R$)", value=0.0, step=50.0)
+
+    btn_salvar = st.form_submit_button("💾 Salvar Alterações & Fatura")
+
+    if btn_salvar:
+        # 1. Processa PDF se enviado
         if uploaded_file is not None:
             df_novo = extrair_transacoes_pdf(uploaded_file)
             if not df_novo.empty:
                 df_fatura = df_novo
                 df_fatura.to_csv(CACHE_FILE, index=False)
-                st.success("Fatura guardada com sucesso!")
-                
-    with col_cfg:
-        meta_fatura = st.number_input("Meta Cartão (R$)", value=5000.0, step=100.0)
-        corte_cabelo = st.number_input("Reserva / Agendados (R$)", value=125.0, step=10.0)
 
-    st.markdown("---")
-    st.markdown("##### 🏠 Despesas Fora do Cartão (Boletos / Pix)")
-    c1, c2, c3, c4, c5 = st.columns(5)
-    val_aluguel = c1.number_input("Aluguel (R$)", value=0.0, step=100.0)
-    val_luz = c2.number_input("Luz (R$)", value=0.0, step=10.0)
-    val_internet = c3.number_input("Internet (R$)", value=0.0, step=10.0)
-    val_celular = c4.number_input("Celular (R$)", value=0.0, step=10.0)
-    val_outros = c5.number_input("Outros (R$)", value=0.0, step=50.0)
+        # 2. Guarda todas as contas manuais
+        novas_configs = {
+            "meta_fatura": meta_fatura,
+            "corte_cabelo": corte_cabelo,
+            "val_aluguel": val_aluguel,
+            "val_luz": val_luz,
+            "val_internet": val_internet,
+            "val_celular": val_celular,
+            "val_outros": val_outros
+        }
+        salvar_configuracoes(novas_configs)
+        st.success("Configurações e contas fixas salvas com sucesso!")
+        st.rerun()
 
 total_despesas_externas = val_aluguel + val_luz + val_internet + val_celular + val_outros
 
@@ -311,7 +361,7 @@ if not df_fatura.empty:
         cor_sub = "#10B981" if saldo_cartao_restante >= 0 else "#EF4444"
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-label">Saldo Cartão Libre</div>
+            <div class="kpi-label">Saldo Cartão Livre</div>
             <div class="kpi-value" style="color: {'#10B981' if saldo_cartao_restante >= 0 else '#EF4444'};">R$ {saldo_cartao_restante:,.2f}</div>
             <div class="kpi-sub" style="color: {cor_sub};">Meta R$ {meta_fatura:,.0f}</div>
         </div>
@@ -406,4 +456,4 @@ if not df_fatura.empty:
         st.dataframe(df_fatura, use_container_width=True, height=350)
 
 else:
-    st.info("👈 Carregue a sua fatura em PDF na caixa acima. Ela ficará salva automaticamente para os próximos acessos!")
+    st.info("👈 Preencha os valores acima e clique em '💾 Salvar Alterações & Fatura' para gravar tudo permanentemente!")
