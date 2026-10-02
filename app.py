@@ -4,20 +4,24 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pdfplumber
 import re
+import os
 from datetime import datetime
 
 # ---------------------------------------------------------
 # CONFIGURAÇÃO DA PÁGINA
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="FinPulse | Copiloto Financeiro",
+    page_title="FinPulse | Controle Financeiro",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
+# Ficheiro de cache para guardar o último extrato carregado
+CACHE_FILE = "ultimo_extrato.csv"
+
 # ---------------------------------------------------------
-# STYLING CSS CUSTOMIZADO (Design Moderno & Mobile-Friendly)
+# STYLING CSS CUSTOMIZADO
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -35,7 +39,6 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
 
-    /* Top Banner / Header Customizado */
     .header-container {
         background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
         backdrop-filter: blur(12px);
@@ -62,7 +65,6 @@ st.markdown("""
         margin-top: 6px;
     }
 
-    /* Cards de Métricas */
     .kpi-card {
         background: rgba(17, 24, 39, 0.7);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -94,7 +96,6 @@ st.markdown("""
         margin-top: 4px;
     }
 
-    /* Tabs Personalizadas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: rgba(17, 24, 39, 0.5);
@@ -123,7 +124,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# FUNÇÃO DE LEITURA DO PDF
+# FUNÇÕES DE PROCESSAMENTO DO PDF
 # ---------------------------------------------------------
 def categorizar_estabelecimento(nome, eh_parcelado):
     if eh_parcelado:
@@ -203,7 +204,7 @@ def extrair_transacoes_pdf(file_bytes):
     return df
 
 # ---------------------------------------------------------
-# PAINEL PRINCIPAL
+# PAINEL PRINCIPAL & LÓGICA DE PERSISTÊNCIA
 # ---------------------------------------------------------
 hoje = datetime.now()
 dia_fechamento = 23
@@ -233,14 +234,31 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# ÁREA DE INPUT DIRECTO NA TELA PRINCIPAL
+# CARREGAMENTO E SESSÃO
 # ---------------------------------------------------------
-with st.expander("📥 1. Carregar Fatura PDF & Ajustar Metas", expanded=True):
+df_fatura = pd.DataFrame()
+
+# Tenta carregar do cache salvo anteriormente
+if os.path.exists(CACHE_FILE):
+    try:
+        df_fatura = pd.read_csv(CACHE_FILE)
+    except Exception:
+        df_fatura = pd.DataFrame()
+
+with st.expander("📥 1. Atualizar Fatura PDF / Configurações", expanded=df_fatura.empty):
     col_up, col_cfg = st.columns([1, 1])
     
     with col_up:
-        uploaded_file = st.file_uploader("Importar Fatura PDF do Cartão", type=["pdf"], key="main_pdf_uploader")
+        uploaded_file = st.file_uploader("Substituir / Importar Fatura PDF", type=["pdf"], key="main_pdf_uploader")
         
+        # Se um novo PDF for submetido, processa e atualiza o ficheiro em cache
+        if uploaded_file is not None:
+            df_novo = extrair_transacoes_pdf(uploaded_file)
+            if not df_novo.empty:
+                df_fatura = df_novo
+                df_fatura.to_csv(CACHE_FILE, index=False)
+                st.success("Fatura guardada com sucesso! Ficará salva para os próximos acessos.")
+                
     with col_cfg:
         meta_fatura = st.number_input("Meta Cartão (R$)", value=5000.0, step=100.0)
         corte_cabelo = st.number_input("Reserva / Agendados (R$)", value=125.0, step=10.0)
@@ -258,132 +276,129 @@ total_despesas_externas = val_aluguel + val_luz + val_gas + val_outros
 # ---------------------------------------------------------
 # PROCESSAMENTO & EXIBIÇÃO
 # ---------------------------------------------------------
-if uploaded_file is not None:
-    df_fatura = extrair_transacoes_pdf(uploaded_file)
+if not df_fatura.empty:
+    total_cartao = df_fatura["Valor"].sum()
+    saldo_cartao_restante = meta_fatura - total_cartao - corte_cabelo
+    meta_diaria = saldo_cartao_restante / dias_restantes if dias_restantes > 0 else 0
+    total_geral_mes = total_cartao + total_despesas_externas
+
+    # --- CARDS DE MÉTRICAS ---
+    kcol1, kcol2, kcol3, kcol4 = st.columns(4)
     
-    if not df_fatura.empty:
-        total_cartao = df_fatura["Valor"].sum()
-        saldo_cartao_restante = meta_fatura - total_cartao - corte_cabelo
-        meta_diaria = saldo_cartao_restante / dias_restantes if dias_restantes > 0 else 0
-        total_geral_mes = total_cartao + total_despesas_externas
-
-        # --- CARDS DE MÉTRICAS ---
-        kcol1, kcol2, kcol3, kcol4 = st.columns(4)
-        
-        with kcol1:
-            st.markdown(f"""
-            <div class="kpi-card">
-                <div class="kpi-label">Cartão Acumulado</div>
-                <div class="kpi-value">R$ {total_cartao:,.2f}</div>
-                <div class="kpi-sub" style="color: #60A5FA;">Fatura atual</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        with kcol2:
-            cor_sub = "#10B981" if saldo_cartao_restante >= 0 else "#EF4444"
-            st.markdown(f"""
-            <div class="kpi-card">
-                <div class="kpi-label">Saldo Cartão Livre</div>
-                <div class="kpi-value" style="color: {'#10B981' if saldo_cartao_restante >= 0 else '#EF4444'};">R$ {saldo_cartao_restante:,.2f}</div>
-                <div class="kpi-sub" style="color: {cor_sub};">Meta R$ {meta_fatura:,.0f}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with kcol3:
-            st.markdown(f"""
-            <div class="kpi-card">
-                <div class="kpi-label">Meta Diária Limite</div>
-                <div class="kpi-value" style="color: #A855F7;">R$ {meta_diaria:,.2f}</div>
-                <div class="kpi-sub" style="color: #9CA3AF;">Restam {dias_restantes} dias</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with kcol4:
-            st.markdown(f"""
-            <div class="kpi-card">
-                <div class="kpi-label">Contas Externas</div>
-                <div class="kpi-value" style="color: #F59E0B;">R$ {total_despesas_externas:,.2f}</div>
-                <div class="kpi-sub" style="color: #9CA3AF;">Pix & Boletos</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Barra de Progresso
-        progresso_pct = min(1.0, max(0.0, total_cartao / meta_fatura)) if meta_fatura > 0 else 1.0
-        cor_barra = "#6366F1" if progresso_pct < 0.85 else "#EF4444"
-        
+    with kcol1:
         st.markdown(f"""
-        <div style="background: rgba(17, 24, 39, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 14px; margin-top: 10px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 600; font-size: 0.85rem;">
-                <span>Consumo da Meta</span>
-                <span>{progresso_pct*100:.1f}% ({total_cartao:,.2f} / {meta_fatura:,.2f})</span>
-            </div>
-            <div style="width: 100%; background-color: #1F2937; height: 8px; border-radius: 20px; overflow: hidden;">
-                <div style="width: {progresso_pct*100}%; background: linear-gradient(90deg, #6366F1 0%, {cor_barra} 100%); height: 100%;"></div>
-            </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Cartão Acumulado</div>
+            <div class="kpi-value">R$ {total_cartao:,.2f}</div>
+            <div class="kpi-sub" style="color: #60A5FA;">Fatura em memória</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with kcol2:
+        cor_sub = "#10B981" if saldo_cartao_restante >= 0 else "#EF4444"
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Saldo Cartão Livre</div>
+            <div class="kpi-value" style="color: {'#10B981' if saldo_cartao_restante >= 0 else '#EF4444'};">R$ {saldo_cartao_restante:,.2f}</div>
+            <div class="kpi-sub" style="color: {cor_sub};">Meta R$ {meta_fatura:,.0f}</div>
         </div>
         """, unsafe_allow_html=True)
 
-        # --- TABS ---
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📈 Linha do Tempo", 
-            "🏪 Locais", 
-            "📊 Categorias", 
-            "🏠 Geral",
-            "📋 Extrato"
-        ])
+    with kcol3:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Meta Diária Limite</div>
+            <div class="kpi-value" style="color: #A855F7;">R$ {meta_diaria:,.2f}</div>
+            <div class="kpi-sub" style="color: #9CA3AF;">Restam {dias_restantes} dias</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        plotly_theme = dict(
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#9CA3AF", family="Plus Jakarta Sans"),
-            margin=dict(l=10, r=10, t=20, b=10)
-        )
+    with kcol4:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Contas Externas</div>
+            <div class="kpi-value" style="color: #F59E0B;">R$ {total_despesas_externas:,.2f}</div>
+            <div class="kpi-sub" style="color: #9CA3AF;">Pix & Boletos</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with tab1:
-            df_timeline = df_fatura.groupby("Data")["Valor"].sum().reset_index()
-            df_timeline["Soma Acumulada"] = df_timeline["Valor"].cumsum()
-            
-            fig_line = go.Figure()
-            fig_line.add_trace(go.Scatter(
-                x=df_timeline["Data"], 
-                y=df_timeline["Soma Acumulada"], 
-                mode='lines+markers',
-                line=dict(color='#818CF8', width=3, shape='spline'),
-                fill='tozeroy',
-                fillcolor='rgba(99, 102, 241, 0.1)'
-            ))
-            fig_line.add_hline(y=meta_fatura, line_dash="dash", line_color="#EF4444")
-            fig_line.update_layout(**plotly_theme, height=320)
-            st.plotly_chart(fig_line, use_container_width=True)
+    # Barra de Progresso
+    progresso_pct = min(1.0, max(0.0, total_cartao / meta_fatura)) if meta_fatura > 0 else 1.0
+    cor_barra = "#6366F1" if progresso_pct < 0.85 else "#EF4444"
+    
+    st.markdown(f"""
+    <div style="background: rgba(17, 24, 39, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 14px; margin-top: 10px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 600; font-size: 0.85rem;">
+            <span>Consumo da Meta</span>
+            <span>{progresso_pct*100:.1f}% ({total_cartao:,.2f} / {meta_fatura:,.2f})</span>
+        </div>
+        <div style="width: 100%; background-color: #1F2937; height: 8px; border-radius: 20px; overflow: hidden;">
+            <div style="width: {progresso_pct*100}%; background: linear-gradient(90deg, #6366F1 0%, {cor_barra} 100%); height: 100%;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-        with tab2:
-            df_estab = df_fatura.groupby("Descrição")["Valor"].sum().sort_values(ascending=True).reset_index()
-            fig_bar = px.bar(df_estab, x="Valor", y="Descrição", orientation='h', text_auto='.2f', color="Valor", color_continuous_scale=["#312E81", "#6366F1"])
-            fig_bar.update_layout(**plotly_theme, height=400, showlegend=False)
-            st.plotly_chart(fig_bar, use_container_width=True)
+    # --- TABS ---
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📈 Linha do Tempo", 
+        "🏪 Locais", 
+        "📊 Categorias", 
+        "🏠 Geral",
+        "📋 Extrato"
+    ])
 
-        with tab3:
-            df_cat = df_fatura.groupby("Categoria")["Valor"].sum().reset_index()
-            fig_pie = px.pie(df_cat, values="Valor", names="Categoria", hole=0.5, color_discrete_sequence=["#6366F1", "#EC4899", "#10B981", "#F59E0B", "#8B5CF6"])
-            fig_pie.update_layout(**plotly_theme, height=350)
-            st.plotly_chart(fig_pie, use_container_width=True)
+    plotly_theme = dict(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#9CA3AF", family="Plus Jakarta Sans"),
+        margin=dict(l=10, r=10, t=20, b=10)
+    )
 
-        with tab4:
-            dados_gerais = [
-                {"Origem": "Cartão", "Tipo": "Variável", "Valor": total_cartao},
-                {"Origem": "Aluguel", "Tipo": "Fixa", "Valor": val_aluguel},
-                {"Origem": "Luz", "Tipo": "Fixa", "Valor": val_luz},
-                {"Origem": "Gás", "Tipo": "Fixa", "Valor": val_gas},
-                {"Origem": "Outros", "Tipo": "Fixa", "Valor": val_outros},
-            ]
-            df_geral = pd.DataFrame(dados_gerais)
-            df_geral = df_geral[df_geral["Valor"] > 0]
-            fig_geral = px.bar(df_geral, x="Origem", y="Valor", color="Tipo", text_auto='.2f', color_discrete_map={"Variável": "#6366F1", "Fixa": "#F59E0B"})
-            fig_geral.update_layout(**plotly_theme, height=350)
-            st.plotly_chart(fig_geral, use_container_width=True)
+    with tab1:
+        df_timeline = df_fatura.groupby("Data")["Valor"].sum().reset_index()
+        df_timeline["Soma Acumulada"] = df_timeline["Valor"].cumsum()
+        
+        fig_line = go.Figure()
+        fig_line.add_trace(go.Scatter(
+            x=df_timeline["Data"], 
+            y=df_timeline["Soma Acumulada"], 
+            mode='lines+markers',
+            line=dict(color='#818CF8', width=3, shape='spline'),
+            fill='tozeroy',
+            fillcolor='rgba(99, 102, 241, 0.1)'
+        ))
+        fig_line.add_hline(y=meta_fatura, line_dash="dash", line_color="#EF4444")
+        fig_line.update_layout(**plotly_theme, height=320)
+        st.plotly_chart(fig_line, use_container_width=True)
 
-        with tab5:
-            st.dataframe(df_fatura, use_container_width=True, height=350)
+    with tab2:
+        df_estab = df_fatura.groupby("Descrição")["Valor"].sum().sort_values(ascending=True).reset_index()
+        fig_bar = px.bar(df_estab, x="Valor", y="Descrição", orientation='h', text_auto='.2f', color="Valor", color_continuous_scale=["#312E81", "#6366F1"])
+        fig_bar.update_layout(**plotly_theme, height=400, showlegend=False)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
-    else:
-        st.error("Não foi possível extrair transações deste PDF.")
+    with tab3:
+        df_cat = df_fatura.groupby("Categoria")["Valor"].sum().reset_index()
+        fig_pie = px.pie(df_cat, values="Valor", names="Categoria", hole=0.5, color_discrete_sequence=["#6366F1", "#EC4899", "#10B981", "#F59E0B", "#8B5CF6"])
+        fig_pie.update_layout(**plotly_theme, height=350)
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with tab4:
+        dados_gerais = [
+            {"Origem": "Cartão", "Tipo": "Variável", "Valor": total_cartao},
+            {"Origem": "Aluguel", "Tipo": "Fixa", "Valor": val_aluguel},
+            {"Origem": "Luz", "Tipo": "Fixa", "Valor": val_luz},
+            {"Origem": "Gás", "Tipo": "Fixa", "Valor": val_gas},
+            {"Origem": "Outros", "Tipo": "Fixa", "Valor": val_outros},
+        ]
+        df_geral = pd.DataFrame(dados_gerais)
+        df_geral = df_geral[df_geral["Valor"] > 0]
+        fig_geral = px.bar(df_geral, x="Origem", y="Valor", color="Tipo", text_auto='.2f', color_discrete_map={"Variável": "#6366F1", "Fixa": "#F59E0B"})
+        fig_geral.update_layout(**plotly_theme, height=350)
+        st.plotly_chart(fig_geral, use_container_width=True)
+
+    with tab5:
+        st.dataframe(df_fatura, use_container_width=True, height=350)
+
+else:
+    st.info("👈 Por favor, carregue a sua fatura em PDF na caixa acima. Ela ficará guardada automaticamente para os próximos acessos!")
